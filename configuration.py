@@ -42,7 +42,7 @@ query_placeholder = """SELECT time_bucket('5 minutes', time) AS five_min, avg(cp
                GROUP BY five_min
                ORDER BY five_min DESC;
                """
-query_drop = "DROP TABLE sensor_data_small"
+query_drop = "DROP TABLE stop_registry"
 query_select = """SELECT * FROM sensor_data_2 WHERE time > '2022-04-09 11:00:00'"""
 
 # Definizione oggetti di prova
@@ -245,3 +245,109 @@ CREATE TABLE machine_info (
     FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code)
 );
 SELECT create_hypertable('machine_info', 'time');"""
+
+query_db2 = """
+    CREATE TABLE machine_devices (
+    machine_code VARCHAR PRIMARY KEY,
+    model VARCHAR NOT NULL,
+    family VARCHAR,
+    needles INTEGER,
+    diameter INTEGER, 
+    eth_address VARCHAR,
+    wlan_address VARCHAR,
+    eth_ip_address VARCHAR,
+    wlan_ip_address VARCHAR
+);
+
+CREATE TABLE programs (
+    program_name VARCHAR PRIMARY KEY
+    );
+
+CREATE TABLE stops (
+      message_code VARCHAR PRIMARY KEY, 
+      type INTEGER NOT NULL,
+      code INTEGER NOT NULL,
+      offset_stop INTEGER NOT NULL,
+      level_stop INTEGER NOT NULL,
+      family INTEGER NOT NULL,
+      stopMac BOOLEAN NOT NULL,
+      stopCte BOOLEAN NOT NULL,
+      message_base TEXT NOT NULL,
+      ----------------component VARCHAR
+);
+
+CREATE TABLE machine_status (
+    time TIMESTAMPTZ PRIMARY KEY,
+    machine_code VARCHAR NOT NULL,
+    program_name VARCHAR,
+    message_code VARCHAR,
+    power_machine BOOLEAN,
+    
+    sub_code INTEGER,
+    reason INTEGER,
+    program_index INTEGER,
+    pieces INTEGER,
+    order_pieces INTEGER,
+    order_target INTEGER,
+    bag_pieces INTEGER,
+    bag_target INTEGER,
+    cycle_time INTEGER,
+    
+    ----------------conc VARCHAR,
+    ----------------programs VARCHAR,
+    ----------------program_order_target INTEGER,
+    ----------------program_bag_target INTEGER,
+    
+    degree INTEGER,
+    course INTEGER,
+    step INTEGER,
+    phase VARCHAR,
+    revision VARCHAR,
+    ----------------args VARCHAR,
+    
+    key_reset BOOLEAN,
+    key_chain_stop BOOLEAN,
+    key_econ_stop BOOLEAN,
+    key_stop_end_cycle BOOLEAN,
+    key_prg_stop BOOLEAN,
+    key_low_speed BOOLEAN,
+    key_middle_speed BOOLEAN,
+    running BOOLEAN,
+    mechanical_reset BOOLEAN,
+    resetting BOOLEAN,
+    next_bag BOOLEAN,
+    queue_full BOOLEAN,
+    limits INTEGER,
+    manual_stop INTEGER,
+    
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (program_name) REFERENCES programs (program_name),
+    FOREIGN KEY (message_code) REFERENCES stops (message_code)
+);
+SELECT create_hypertable('machine_status', 'time');
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

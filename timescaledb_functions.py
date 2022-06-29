@@ -12,6 +12,7 @@ def print__message(conn):
 
 def normal_insert(conn, table, columns, values):
     cursor = conn.cursor()
+    conn.commit()
     str_col = ""
     for col in columns:
         str_col += col + ", "
