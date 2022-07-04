@@ -9,11 +9,12 @@ import glob
 import pandas as pd
 import numpy as np
 from psycopg2.extensions import register_adapter, AsIs
+import math
 
 psycopg2.extensions.register_adapter(np.int64, AsIs)
 psycopg2.extensions.register_adapter(np.bool_, AsIs)
 
-directory = "Lonati Giugno/"
+directory = "new Lonati Giugno/"
 files = glob.glob(directory + "*.csv")
 
 if __name__ == '__main__':
@@ -21,15 +22,19 @@ if __name__ == '__main__':
     conn = psycopg2.connect(CONNECTION)
 
     inizio = datetime.now()
-    #executeQuery(conn, "DROP MATERIALIZED VIEW sensor_data_small_view_temperature_hour")
-    #executeQuery(conn, "DELETE FROM stops")
-    #executeQuery(conn, query_drop)
-    #executeQuery(conn, query_db2)
+    # executeQuery(conn, "DROP MATERIALIZED VIEW sensor_data_small_view_temperature_hour")
+    # executeQuery(conn, "DELETE FROM stops")
+    # executeQuery(conn, "ALTER TABLE electrovalve_values DROP CONSTRAINT electrovalve_values_pkey;")
+    # executeQuery(conn,  "ALTER TABLE electrovalve_values ADD PRIMARY KEY (time, machine_code, electrovalve_id);")
+    # executeQuery(conn, "ALTER TABLE motors_values ALTER COLUMN i2t TYPE BIGINT;")
+    # executeQuery(conn, query_drop)
+    # executeQuery(conn, query_db_diag)
+    # executeQuery(conn, "ALTER TABLE tamburini_values ALTER COLUMN count TYPE VARCHAR;")
     # executeQuery(conn, query_create_sensordata_hypertable)
     # create_continuous_aggregation(conn, 'sensor_data_small', '1 hour', 'sensor_id', 'temperature', 'sensor_data_small_view_temperature_hour')
     # add_policy(conn, 'sensor_data_small_view_temperature_hour', '1 day', '1 hour', '1 hour')
     # fast_insert(conn, 'sensor_data_small', ['time', 'sensor_id', 'temperature', 'cpu'], 1, 8)
-    #print_table_values(conn, 'programs', 'count', ['program_name'])
+    # print_table_values(conn, 'programs', 'count', ['program_name'])
     # update_last_element(conn, 'sensor_data_2', ['cpu'], (0.9999, 5), 'sensor_id')
     # refresh_view(conn, 'temperature_summary_view2', '2022-06-10', '2022-06-22')
 
@@ -85,7 +90,7 @@ if __name__ == '__main__':
                     normal_insert(conn, 'machine_status', ['time', 'machine_code', 'program_name'], [values])
                 except Exception as e:
                     print(e)
-                    
+
             if "STOP" in line:
                 data = json.loads(line[21:])
                 df_nested_list = pd.json_normalize(
@@ -110,7 +115,7 @@ if __name__ == '__main__':
                     normal_insert(conn, 'machine_status', ['time', 'machine_code', 'message_code', 'degree', 'course', 'step', 'phase', 'revision'], [values])
                 except Exception as e:
                     print(e)
-            
+
             if "POWERON" in line:
                 data = json.loads(line[21:])
                 df_nested_list = pd.json_normalize(
@@ -125,7 +130,7 @@ if __name__ == '__main__':
                     normal_insert(conn, 'machine_status', ['time', 'machine_code', 'power_machine'], [values_on])
                 except Exception as e:
                     print(e)
-            
+
             if "COUNTERS" in line:
                 data = json.loads(line[21:])
                 df_nested_list = pd.json_normalize(
@@ -180,6 +185,204 @@ if __name__ == '__main__':
                                                            'queue_full', 'limits', 'manual_stop'], [values])
                 except Exception as e:
                     print(e)
+
+            if "INFO_MPP" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                try:
+                    for row in df_nested_list.iterrows():
+                        id = row[1]['id']
+                        name = row[1]['info.name']
+                        logic_trac = row[1]['info.logic_trac']
+                        values = (id, name, logic_trac)
+                        normal_insert(conn, 'motors_info', ['motors_id', 'name', 'logic_trac'], [values])
+                        print("MPP " + str(id) + " inserito con successo")
+                except Exception as e:
+                    print(e)
+            if "DIAG_MPP" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                # TODO: da verificare il corretto funzionamento
+                df_nested_list = df_nested_list.groupby(['timestamp', 'machine_id', 'id']).max().reset_index()
+                try:
+                    for row in df_nested_list.iterrows():
+                        # TODO: aggiungere la selezione del logic_trac
+                        motor_id = row[1]['id']
+                        timestamp = row[1]['timestamp']
+                        machine_id = row[1]['machine_id']
+                        steps = row[1]['value.stepsPullOver'] if 'stepsPullOver' in str(row[1]) else -1111
+                        i2t = row[1]['value.I2T'] if 'I2T' in str(row[1]) and math.isnan(row[1]['value.I2T']) == False else -1
+                        round = row[1]['value.round'] if 'round' in str(row[1]) else -1
+                        time_move = row[1]['value.timeMove'] if 'timeMove' in str(row[1]) else -1
+                        if i2t != -1:
+                            values = (motor_id, timestamp, machine_id, i2t, time_move)
+                            normal_insert(conn, 'motors_values', ['motors_id', 'time', 'machine_code', 'I2T', 'timeMove'], [values])
+                        elif steps != -1111:
+                            values = (motor_id, timestamp, machine_id, steps)
+                            normal_insert(conn, 'motors_values', ['motors_id', 'time', 'machine_code', 'stepsPullOver'], [values])
+                        else:
+                            values = (motor_id, timestamp, machine_id, round)
+                            normal_insert(conn, 'motors_values', ['motors_id', 'time', 'machine_code', 'round'], [values])
+                except Exception as e:
+                    print(e)
+
+            if "INFO_AZ" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                try:
+                    for row in df_nested_list.iterrows():
+                        id = row[1]['id']
+                        name = row[1]['info.name']
+                        values = (id, name)
+                        normal_insert(conn, 'azionamenti_info', ['azionamenti_id', 'name'], [values])
+                        print("Azionamento " + str(id) + " inserito con successo")
+                except Exception as e:
+                    print(e)
+            if "DIAG_AZ" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                # TODO: da verificare il corretto funzionamento
+                df_nested_list = df_nested_list.groupby(['timestamp', 'machine_id', 'id']).max().reset_index()
+                try:
+                    for row in df_nested_list.iterrows():
+                        azionamenti_id = row[1]['id']
+                        timestamp = row[1]['timestamp']
+                        machine_id = row[1]['machine_id']
+                        power = row[1]['value.power']
+                        values = (azionamenti_id, timestamp, machine_id, power)
+                        normal_insert(conn, 'azionamenti_values', ['azionamenti_id', 'time', 'machine_code', 'power'], [values])
+                except Exception as e:
+                    print(e)
+
+            if "INFO_GRYF" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                try:
+                    for row in df_nested_list.iterrows():
+                        id = row[1]['id']
+                        name = row[1]['info.name']
+                        values = (id, name)
+                        normal_insert(conn, 'thread_power_supply_info', ['thread_power_supply_id', 'name'], [values])
+                        print("GRYF " + str(id) + " inserito con successo")
+                except Exception as e:
+                    print(e)
+            if "DIAG_GRYF" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                # TODO: da verificare il corretto funzionamento
+                df_nested_list = df_nested_list.groupby(['timestamp', 'machine_id', 'id']).max().reset_index()
+                try:
+                    for row in df_nested_list.iterrows():
+                        thread_power_supply_id = row[1]['id']
+                        timestamp = row[1]['timestamp']
+                        machine_id = row[1]['machine_id']
+                        load = row[1]['value.load'] if 'load' in str(row[1]) and math.isnan(row[1]['value.load']) == False else 0
+                        consumption = row[1]['value.consumption'] if 'consumption' in str(row[1]) and math.isnan(row[1]['value.consumption']) == False else 0
+                        values = (thread_power_supply_id, timestamp, machine_id, load, consumption)
+                        normal_insert(conn, 'thread_power_supply_values', ['thread_power_supply_id', 'time', 'machine_code', 'load', 'consumption'], [values])
+                        print("-.-.-.-.-.-.-.-.-.-")
+                except Exception as e:
+                    print(e)
+
+            if "INFO_TAMB" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                try:
+                    for row in df_nested_list.iterrows():
+                        id = row[1]['id']
+                        name = row[1]['info.name']
+                        levels = row[1]['info.levels'] if 'levels' in str(row[1]) and math.isnan(row[1]['info.levels']) == False else 0
+                        values = (id, name, levels)
+                        normal_insert(conn, 'tamburini_info', ['tamburini_id', 'name', 'levels'], [values])
+                        print("tamburino " + str(id) + " inserito con successo")
+                except Exception as e:
+                    print(e)
+            if "DIAG_TAMB" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                # TODO: da verificare il corretto funzionamento
+                df_nested_list = df_nested_list.groupby(['timestamp', 'machine_id', 'id']).max().reset_index()
+                for row in df_nested_list.iterrows():
+                    try:
+                        tamburini_id = row[1]['id']
+                        timestamp = row[1]['timestamp']
+                        machine_id = row[1]['machine_id']
+                        count = row[1]['value.count'] if 'count' in str(row[1]) else ""
+                        values = (tamburini_id, timestamp, machine_id, count)
+                        normal_insert(conn, 'tamburini_values', ['tamburini_id', 'time', 'machine_code', 'count'], [values])
+                    except Exception as e:
+                        print(e)
+
+            if "INFO_EV" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                for row in df_nested_list.iterrows():
+                    try:
+                        id = row[1]['id']
+                        name = row[1]['info.name']
+                        max_shot = row[1]['info.max_shot'] if 'max_shot' in str(row[1]) and math.isnan(
+                            row[1]['info.max_shot']) == False else -1
+                        values = (id, name, max_shot)
+                        normal_insert(conn, 'electrovalve_info', ['electrovalve_id', 'name', 'max_shot'], [values])
+                        print("elettrovalvola " + str(id) + " inserita con successo")
+                    except Exception as e:
+                        print(e)
+            if "DIAG_EV" in line:
+                data = json.loads(line[21:])
+                df_nested_list = pd.json_normalize(
+                    data,
+                    record_path=['messages', 'actuators'],
+                    meta=['timestamp', 'machine_id']
+                )
+                # TODO: da verificare il corretto funzionamento
+                df_nested_list = df_nested_list.groupby(['timestamp', 'machine_id', 'id']).max().reset_index()
+                for row in df_nested_list.iterrows():
+                    try:
+                        tamburini_id = row[1]['id']
+                        timestamp = row[1]['timestamp']
+                        machine_id = row[1]['machine_id']
+                        count = row[1]['value.count'] if 'count' in str(row[1]) else ""
+                        values = (tamburini_id, timestamp, machine_id, count)
+                        normal_insert(conn, 'electrovalve_values', ['electrovalve_id', 'time', 'machine_code', 'count'],
+                                      [values])
+                    except Exception as e:
+                        print(e)
         fileReader.close()
 
     fine = datetime.now()

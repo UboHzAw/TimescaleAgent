@@ -282,7 +282,7 @@ CREATE TABLE machine_status (
     program_name VARCHAR,
     message_code VARCHAR,
     power_machine BOOLEAN,
-    
+
     sub_code INTEGER,
     reason INTEGER,
     program_index INTEGER,
@@ -292,19 +292,19 @@ CREATE TABLE machine_status (
     bag_pieces INTEGER,
     bag_target INTEGER,
     cycle_time INTEGER,
-    
+
     ----------------conc VARCHAR,
     ----------------programs VARCHAR,
     ----------------program_order_target INTEGER,
     ----------------program_bag_target INTEGER,
-    
+
     degree INTEGER,
     course INTEGER,
     step INTEGER,
     phase VARCHAR,
     revision VARCHAR,
     ----------------args VARCHAR,
-    
+
     key_reset BOOLEAN,
     key_chain_stop BOOLEAN,
     key_econ_stop BOOLEAN,
@@ -319,14 +319,118 @@ CREATE TABLE machine_status (
     queue_full BOOLEAN,
     limits INTEGER,
     manual_stop INTEGER,
-    
+
     FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
     FOREIGN KEY (program_name) REFERENCES programs (program_name),
     FOREIGN KEY (message_code) REFERENCES stops (message_code)
 );
 SELECT create_hypertable('machine_status', 'time');
 """
+query_db_diag = """
+CREATE TABLE azionamenti_info (
+    azionamenti_id VARCHAR PRIMARY KEY,
+    name TEXT NOT NULL
+);
 
+CREATE TABLE azionamenti_values (
+    time TIMESTAMPTZ NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    azionamenti_id VARCHAR NOT NULL,
+    power INTEGER,
+    CONSTRAINT azionamenti_values_pks PRIMARY KEY(time, machine_code, azionamenti_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (azionamenti_id) REFERENCES azionamenti_info (azionamenti_id)
+);
+SELECT create_hypertable('azionamenti_values', 'time');
+
+CREATE TABLE thread_power_supply_info (
+    thread_power_supply_id VARCHAR PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE thread_power_supply_values (
+    time TIMESTAMPTZ NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    thread_power_supply_id VARCHAR NOT NULL,
+    consumption INTEGER,
+    load INTEGER,
+    CONSTRAINT thread_power_supply_values_pks PRIMARY KEY(time, machine_code, thread_power_supply_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (thread_power_supply_id) REFERENCES thread_power_supply_info (thread_power_supply_id)
+);
+SELECT create_hypertable('thread_power_supply_values', 'time');
+
+CREATE TABLE ps_power_supply_info (
+    ps_power_supply_id VARCHAR PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE ps_power_supply_values (
+    time TIMESTAMPTZ NOT NULL,
+    ps_power_supply_id VARCHAR NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    power INTEGER,
+    CONSTRAINT ps_power_supply_values_pks PRIMARY KEY(time, machine_code, ps_power_supply_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (ps_power_supply_id) REFERENCES ps_power_supply_info (ps_power_supply_id)
+);
+SELECT create_hypertable('ps_power_supply_values', 'time');
+
+CREATE TABLE tamburini_info (
+    tamburini_id VARCHAR PRIMARY KEY,
+    name TEXT NOT NULL,
+    levels INTEGER[] NOT NULL
+);
+
+CREATE TABLE tamburini_values (
+    time TIMESTAMPTZ NOT NULL,
+    tamburini_id VARCHAR NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    count INTEGER,
+    CONSTRAINT tamburini_values_pks PRIMARY KEY(time, machine_code, tamburini_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (tamburini_id) REFERENCES tamburini_info (tamburini_id)
+);
+SELECT create_hypertable('tamburini_values', 'time');
+
+CREATE TABLE electrovalve_info (
+    electrovalve_id VARCHAR PRIMARY KEY,
+    name TEXT NOT NULL,
+    max_shot INTEGER
+);
+
+CREATE TABLE electrovalve_values (
+    time TIMESTAMPTZ NOT NULL,
+    electrovalve_id VARCHAR NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    count VARCHAR,
+    time_max VARCHAR,
+    CONSTRAINT electrovalve_values_pks PRIMARY KEY(time, machine_code, electrovalve_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (electrovalve_id) REFERENCES electrovalve_info (electrovalve_id)
+);
+SELECT create_hypertable('electrovalve_values', 'time');
+
+CREATE TABLE motors_info (
+    motors_id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    logic_trac INTEGER
+);
+
+CREATE TABLE motors_values (
+    time TIMESTAMPTZ,
+    motors_id VARCHAR NOT NULL,
+    machine_code VARCHAR NOT NULL,
+    stepsPullOver INTEGER,
+    I2T INTEGER,
+    timeMove INTEGER,
+    round INTEGER,
+    CONSTRAINT motors_values_pks PRIMARY KEY(time, machine_code, motors_id),
+    FOREIGN KEY (machine_code) REFERENCES machine_devices (machine_code),
+    FOREIGN KEY (motors_id) REFERENCES motors_info (motors_id)
+);
+SELECT create_hypertable('motors_values', 'time');
+"""
 
 
 
